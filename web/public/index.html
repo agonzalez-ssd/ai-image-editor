@@ -1,0 +1,2026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Image Editor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 30px 0;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      color: #888;
+      font-size: 1.1rem;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 1000px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .panel h2 {
+      font-size: 1.2rem;
+      margin-bottom: 20px;
+      color: #667eea;
+    }
+
+    /* Upload Area */
+    .upload-area {
+      border: 2px dashed rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 20px;
+    }
+
+    .upload-area:hover {
+      border-color: #667eea;
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    .upload-area.dragover {
+      border-color: #764ba2;
+      background: rgba(118, 75, 162, 0.2);
+    }
+
+    .upload-icon {
+      font-size: 3rem;
+      margin-bottom: 10px;
+    }
+
+    .upload-area input[type="file"] {
+      display: none;
+    }
+
+    /* URL Input */
+    .url-input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .url-input-group input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .url-input-group input::placeholder {
+      color: #666;
+    }
+
+    /* Image Preview with Mask Canvas */
+    .image-editor-container {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.3);
+      min-height: 300px;
+    }
+
+    .image-preview {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .image-preview img {
+      max-width: 100%;
+      max-height: 500px;
+      object-fit: contain;
+      display: block;
+      transform-origin: center center;
+      transition: transform 0.1s ease-out;
+    }
+
+    /* Zoom Controls */
+    .zoom-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.6);
+      border-radius: 8px;
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      z-index: 100;
+    }
+
+    .zoom-controls.hidden {
+      display: none;
+    }
+
+    .zoom-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .zoom-btn:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .zoom-level {
+      font-size: 12px;
+      color: #aaa;
+      min-width: 45px;
+      text-align: center;
+    }
+
+    /* Element Layers Panel */
+    .elements-panel {
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 15px;
+    }
+
+    .elements-panel h3 {
+      color: #667eea;
+      margin-bottom: 12px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .element-upload-area {
+      border: 2px dashed rgba(255,255,255,0.15);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 12px;
+    }
+
+    .element-upload-area:hover {
+      border-color: #667eea;
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    .element-upload-area input[type="file"] {
+      display: none;
+    }
+
+    .imported-elements {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .imported-element {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .imported-element:hover {
+      border-color: #667eea;
+    }
+
+    .imported-element.selected {
+      border-color: #764ba2;
+      box-shadow: 0 0 10px rgba(118, 75, 162, 0.5);
+    }
+
+    .imported-element img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .imported-element .remove-btn {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(234, 102, 102, 0.9);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-size: 12px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .imported-element:hover .remove-btn {
+      display: flex;
+    }
+
+    /* Draggable element on canvas */
+    .draggable-element {
+      position: absolute;
+      cursor: move;
+      border: 2px dashed rgba(102, 126, 234, 0.7);
+      box-sizing: border-box;
+    }
+
+    .draggable-element img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .draggable-element .resize-handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #667eea;
+      border-radius: 50%;
+      cursor: nwse-resize;
+    }
+
+    .draggable-element .resize-handle.se { bottom: -6px; right: -6px; }
+    .draggable-element .resize-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+    .draggable-element .resize-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+    .draggable-element .resize-handle.nw { top: -6px; left: -6px; }
+
+    .image-preview .placeholder {
+      color: #666;
+      text-align: center;
+      padding: 100px 20px;
+    }
+
+    /* Mask Canvas Overlay */
+    .mask-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      cursor: crosshair;
+      pointer-events: none;
+    }
+
+    .mask-canvas.active {
+      pointer-events: auto;
+    }
+
+    /* Mask Tools */
+    .mask-tools {
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .mask-tools.hidden {
+      display: none;
+    }
+
+    .tool-btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .tool-btn:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .tool-btn.active {
+      background: #667eea;
+      border-color: #667eea;
+    }
+
+    .tool-separator {
+      width: 1px;
+      height: 24px;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .brush-size-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brush-size-control input[type="range"] {
+      width: 80px;
+      accent-color: #667eea;
+    }
+
+    .brush-size-control span {
+      font-size: 12px;
+      color: #aaa;
+      min-width: 35px;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* Quick Actions */
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .quick-btn {
+      padding: 16px 8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: center;
+    }
+
+    .quick-btn:hover {
+      background: rgba(102, 126, 234, 0.2);
+      border-color: #667eea;
+    }
+
+    .quick-btn .icon {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+
+    .quick-btn .label {
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    /* Instruction Input */
+    .instruction-group {
+      margin-bottom: 20px;
+    }
+
+    .instruction-group textarea {
+      width: 100%;
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 16px;
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    .instruction-group textarea::placeholder {
+      color: #666;
+    }
+
+    /* Mask indicator */
+    .mask-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(102, 126, 234, 0.2);
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-size: 13px;
+    }
+
+    .mask-indicator.hidden {
+      display: none;
+    }
+
+    .mask-indicator .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #667eea;
+    }
+
+    /* Scene Analysis */
+    .scene-analysis {
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .scene-analysis h3 {
+      color: #667eea;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+
+    .element-tag {
+      display: inline-block;
+      background: rgba(102, 126, 234, 0.2);
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .element-tag:hover {
+      background: rgba(102, 126, 234, 0.4);
+    }
+
+    /* Status */
+    .status {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .status.loading {
+      display: block;
+      background: rgba(102, 126, 234, 0.2);
+      border: 1px solid #667eea;
+    }
+
+    .status.error {
+      display: block;
+      background: rgba(234, 102, 102, 0.2);
+      border: 1px solid #ea6666;
+    }
+
+    .status.success {
+      display: block;
+      background: rgba(102, 234, 134, 0.2);
+      border: 1px solid #66ea86;
+    }
+
+    /* Undo/Redo Controls */
+    .undo-redo-controls {
+      display: flex;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.4);
+      border-radius: 8px;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+    }
+
+    .undo-redo-controls.hidden {
+      display: none;
+    }
+
+    .undo-redo-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .undo-redo-btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .undo-redo-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* Result Panel */
+    .result-panel {
+      margin-top: 20px;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    /* Loading Spinner */
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>AI Image Editor</h1>
+      <p>Edit images using natural language - with precision masking</p>
+    </header>
+
+    <div class="main-grid">
+      <!-- Input Panel -->
+      <div class="panel">
+        <h2>Input Image</h2>
+
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-icon">📁</div>
+          <p>Drop image here or click to upload</p>
+          <p style="color: #666; font-size: 12px; margin-top: 8px;">PNG, JPG, WebP up to 50MB</p>
+          <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <div class="url-input-group">
+          <input type="text" id="urlInput" placeholder="Or paste image URL...">
+          <button class="btn btn-secondary" onclick="loadFromUrl()">Load</button>
+        </div>
+
+        <!-- Mask Tools -->
+        <div class="mask-tools hidden" id="maskTools">
+          <button class="tool-btn" id="btnPaint" onclick="setMaskMode('paint')">🖌️ Paint</button>
+          <button class="tool-btn" id="btnErase" onclick="setMaskMode('erase')">🧹 Erase</button>
+          <button class="tool-btn" id="btnSelect" onclick="setMaskMode('select')">👆 Click Select</button>
+          <div class="tool-separator"></div>
+          <div class="brush-size-control">
+            <span>Size:</span>
+            <input type="range" id="brushSize" min="5" max="100" value="30" oninput="updateBrushSize()">
+            <span id="brushSizeValue">30px</span>
+          </div>
+          <div class="tool-separator"></div>
+          <button class="tool-btn" onclick="clearMask()">🗑️ Clear</button>
+          <button class="tool-btn" onclick="invertMask()">🔄 Invert</button>
+        </div>
+
+        <div class="image-editor-container" id="editorContainer">
+          <div class="image-preview" id="inputPreview">
+            <div class="placeholder">No image loaded</div>
+          </div>
+          <canvas class="mask-canvas" id="maskCanvas"></canvas>
+
+          <!-- Undo/Redo Controls -->
+          <div class="undo-redo-controls hidden" id="undoRedoControls">
+            <button class="undo-redo-btn" onclick="undo()" id="undoBtn" disabled title="Undo (Ctrl+Z)">↩️</button>
+            <button class="undo-redo-btn" onclick="redo()" id="redoBtn" disabled title="Redo (Ctrl+Y)">↪️</button>
+          </div>
+
+          <!-- Zoom Controls -->
+          <div class="zoom-controls hidden" id="zoomControls">
+            <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out">-</button>
+            <span class="zoom-level" id="zoomLevel">100%</span>
+            <button class="zoom-btn" onclick="zoomIn()" title="Zoom In">+</button>
+            <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom">1:1</button>
+            <button class="zoom-btn" onclick="fitToView()" title="Fit to View">Fit</button>
+          </div>
+        </div>
+
+        <!-- Element Import Panel -->
+        <div class="elements-panel" id="elementsPanel">
+          <h3>
+            <span>Add Elements</span>
+            <span style="font-weight: normal; color: #888; font-size: 12px;">(logos, objects, people)</span>
+          </h3>
+          <div class="element-upload-area" id="elementUploadArea">
+            <p style="color: #888;">Drop element here or click to add</p>
+            <p style="color: #666; font-size: 11px; margin-top: 5px;">PNG with transparency works best</p>
+            <input type="file" id="elementInput" accept="image/*" multiple>
+          </div>
+          <div class="imported-elements" id="importedElements"></div>
+          <div id="elementInstructions" style="display: none; margin-top: 10px; padding: 10px; background: rgba(102, 126, 234, 0.1); border-radius: 6px; font-size: 12px;">
+            Click an element to place it on the image. Drag to move, use handles to resize.
+            <br><button class="tool-btn" onclick="flattenElements()" style="margin-top: 8px;">Flatten Elements onto Image</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Edit Panel -->
+      <div class="panel">
+        <h2>Edit Controls</h2>
+
+        <div class="quick-actions">
+          <button class="quick-btn" onclick="quickEdit('remove-bg')">
+            <div class="icon">✂️</div>
+            <div class="label">Remove BG</div>
+          </button>
+          <button class="quick-btn" onclick="quickEdit('upscale')">
+            <div class="icon">🔍</div>
+            <div class="label">Upscale 4x</div>
+          </button>
+          <button class="quick-btn" onclick="analyzeImage()">
+            <div class="icon">🔬</div>
+            <div class="label">Analyze</div>
+          </button>
+          <button class="quick-btn" onclick="toggleMaskMode()" id="btnMask">
+            <div class="icon">🎨</div>
+            <div class="label">Mask Edit</div>
+          </button>
+        </div>
+
+        <div class="scene-analysis" id="sceneAnalysis" style="display: none;">
+          <h3>Scene Elements (click to select)</h3>
+          <div id="sceneElements"></div>
+        </div>
+
+        <div class="mask-indicator hidden" id="maskIndicator">
+          <span class="dot"></span>
+          <span>Mask active - edit will apply only to masked region</span>
+          <button class="tool-btn" onclick="clearMask()" style="margin-left: auto; padding: 4px 8px;">Clear</button>
+        </div>
+
+        <div class="instruction-group">
+          <textarea id="instruction" placeholder="Describe what you want to do...
+
+Examples:
+• Change the sign color to blue
+• Remove the watermark
+• Make the background dark gray
+• Add a plant in the corner"></textarea>
+        </div>
+
+        <button class="btn btn-primary" onclick="executeEdit()" id="btnEdit" style="width: 100%;">
+          ✨ Apply Edit
+        </button>
+
+        <div id="status" class="status"></div>
+
+        <div class="result-panel" id="resultPanel" style="display: none;">
+          <h2>Result</h2>
+          <div class="image-preview" id="outputPreview" style="background: rgba(0,0,0,0.3); border-radius: 12px; min-height: 200px;"></div>
+          <div class="result-actions">
+            <a id="downloadLink" class="btn btn-primary" download="edited-image.png">
+              Download <span id="downloadRes"></span>
+            </a>
+            <button class="btn btn-secondary" onclick="useAsInput()">
+              Use as New Input
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentImageSource = null;
+    let currentScene = null;
+    let maskMode = null; // null, 'paint', 'erase'
+    let hasMask = false;
+    let brushSize = 30;
+    let isDrawing = false;
+    let imageElement = null;
+
+    // Zoom state
+    let zoomLevel = 1;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+
+    // Element import state
+    let importedElements = [];
+    let placedElements = [];
+    let selectedPlacedElement = null;
+    let isDraggingElement = false;
+    let isResizingElement = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    // Undo/Redo history
+    let historyStack = [];
+    let historyIndex = -1;
+    const MAX_HISTORY = 50;
+
+    // Canvas setup
+    const maskCanvas = document.getElementById('maskCanvas');
+    const ctx = maskCanvas.getContext('2d');
+
+    // File upload handling
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+
+    uploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+      uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) uploadFile(file);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) uploadFile(file);
+    });
+
+    // Mask canvas events
+    maskCanvas.addEventListener('mousedown', startDrawing);
+    maskCanvas.addEventListener('mousemove', draw);
+    maskCanvas.addEventListener('mouseup', stopDrawing);
+    maskCanvas.addEventListener('mouseleave', stopDrawing);
+    maskCanvas.addEventListener('click', handleCanvasClick);
+
+    function startDrawing(e) {
+      if (maskMode !== 'paint' && maskMode !== 'erase') return;
+      isDrawing = true;
+      draw(e);
+    }
+
+    function draw(e) {
+      if (!isDrawing) return;
+      if (maskMode !== 'paint' && maskMode !== 'erase') return;
+
+      const rect = maskCanvas.getBoundingClientRect();
+      const scaleX = maskCanvas.width / rect.width;
+      const scaleY = maskCanvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+
+      ctx.beginPath();
+      ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+
+      if (maskMode === 'paint') {
+        ctx.fillStyle = 'rgba(102, 126, 234, 0.5)';
+        ctx.fill();
+        hasMask = true;
+        updateMaskIndicator();
+      } else if (maskMode === 'erase') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+
+    function stopDrawing() {
+      isDrawing = false;
+    }
+
+    async function handleCanvasClick(e) {
+      if (maskMode !== 'select') return;
+
+      const rect = maskCanvas.getBoundingClientRect();
+      const scaleX = maskCanvas.width / rect.width;
+      const scaleY = maskCanvas.height / rect.height;
+      const x = Math.round((e.clientX - rect.left) * scaleX);
+      const y = Math.round((e.clientY - rect.top) * scaleY);
+
+      showStatus('loading', `Segmenting at point (${x}, ${y})...`);
+
+      try {
+        const response = await fetch('/api/segment-point', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageSource: currentImageSource,
+            point: { x, y }
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        if (data.maskUrl) {
+          const maskImg = new Image();
+          maskImg.crossOrigin = 'anonymous';
+          maskImg.onload = () => {
+            ctx.globalAlpha = 0.5;
+            ctx.drawImage(maskImg, 0, 0, maskCanvas.width, maskCanvas.height);
+            ctx.globalAlpha = 1.0;
+            hasMask = true;
+            updateMaskIndicator();
+            hideStatus();
+            showStatus('success', 'Object selected!');
+          };
+          maskImg.src = data.maskUrl;
+        }
+      } catch (error) {
+        showStatus('error', error.message);
+      }
+    }
+
+    function setMaskMode(mode) {
+      maskMode = mode;
+      document.querySelectorAll('.mask-tools .tool-btn').forEach(btn => btn.classList.remove('active'));
+
+      if (mode === 'paint') {
+        document.getElementById('btnPaint').classList.add('active');
+        maskCanvas.style.cursor = 'crosshair';
+      } else if (mode === 'erase') {
+        document.getElementById('btnErase').classList.add('active');
+        maskCanvas.style.cursor = 'crosshair';
+      } else if (mode === 'select') {
+        document.getElementById('btnSelect').classList.add('active');
+        maskCanvas.style.cursor = 'pointer';
+      }
+    }
+
+    function toggleMaskMode() {
+      const tools = document.getElementById('maskTools');
+      const isHidden = tools.classList.contains('hidden');
+
+      if (isHidden) {
+        tools.classList.remove('hidden');
+        maskCanvas.classList.add('active');
+        setMaskMode('paint');
+      } else {
+        tools.classList.add('hidden');
+        maskCanvas.classList.remove('active');
+        maskMode = null;
+      }
+    }
+
+    function updateBrushSize() {
+      brushSize = parseInt(document.getElementById('brushSize').value);
+      document.getElementById('brushSizeValue').textContent = brushSize + 'px';
+    }
+
+    function clearMask() {
+      ctx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      hasMask = false;
+      updateMaskIndicator();
+    }
+
+    function invertMask() {
+      const imageData = ctx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+      const data = imageData.data;
+
+      // Create full mask first
+      ctx.fillStyle = 'rgba(102, 126, 234, 0.5)';
+      ctx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+
+      // Then cut out the original mask
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.putImageData(imageData, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+
+      hasMask = true;
+      updateMaskIndicator();
+    }
+
+    function updateMaskIndicator() {
+      const indicator = document.getElementById('maskIndicator');
+      if (hasMask) {
+        indicator.classList.remove('hidden');
+      } else {
+        indicator.classList.add('hidden');
+      }
+    }
+
+    function getMaskDataUrl() {
+      if (!hasMask) return null;
+
+      // Create a black/white mask for the API
+      // Gemini convention: WHITE = area to EDIT, BLACK = area to KEEP
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = maskCanvas.width;
+      tempCanvas.height = maskCanvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      // Fill with black (area to keep unchanged)
+      tempCtx.fillStyle = 'black';
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+      // Get original mask data
+      const maskData = ctx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+
+      // Convert colored mask to white (area to edit)
+      tempCtx.fillStyle = 'white';
+      for (let i = 0; i < maskData.data.length; i += 4) {
+        if (maskData.data[i + 3] > 0) { // If pixel has alpha
+          const x = (i / 4) % maskCanvas.width;
+          const y = Math.floor((i / 4) / maskCanvas.width);
+          tempCtx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      return tempCanvas.toDataURL('image/png');
+    }
+
+    async function uploadFile(file) {
+      showStatus('loading', 'Uploading image...');
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        currentImageSource = data.id;
+        showPreview('inputPreview', data.preview);
+        setupMaskCanvas(data.preview);
+        hideStatus();
+
+        // Show mask tools
+        document.getElementById('maskTools').classList.remove('hidden');
+
+        // Auto-analyze
+        analyzeImage();
+      } catch (error) {
+        showStatus('error', error.message);
+      }
+    }
+
+    function loadFromUrl() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+
+      currentImageSource = url;
+      showPreview('inputPreview', url);
+      setupMaskCanvas(url);
+
+      // Show mask tools
+      document.getElementById('maskTools').classList.remove('hidden');
+
+      analyzeImage();
+    }
+
+    function showPreview(elementId, src) {
+      const preview = document.getElementById(elementId);
+      preview.innerHTML = `<img src="${src}" alt="Preview">`;
+      imageElement = preview.querySelector('img');
+
+      // Show zoom controls when image is loaded
+      if (elementId === 'inputPreview') {
+        document.getElementById('zoomControls').classList.remove('hidden');
+        resetZoom();
+
+        // Initialize history with empty state
+        historyStack = [{ action: 'init', data: [], timestamp: Date.now() }];
+        historyIndex = 0;
+        updateUndoRedoButtons();
+      }
+    }
+
+    function setupMaskCanvas(imageSrc) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        // Match canvas size to displayed image
+        const preview = document.getElementById('inputPreview');
+        const displayedImg = preview.querySelector('img');
+
+        // Wait for image to render
+        setTimeout(() => {
+          const rect = displayedImg.getBoundingClientRect();
+          maskCanvas.width = displayedImg.naturalWidth;
+          maskCanvas.height = displayedImg.naturalHeight;
+          maskCanvas.style.width = rect.width + 'px';
+          maskCanvas.style.height = rect.height + 'px';
+
+          // Position canvas over image
+          const previewRect = preview.getBoundingClientRect();
+          const imgRect = displayedImg.getBoundingClientRect();
+          maskCanvas.style.left = (imgRect.left - previewRect.left) + 'px';
+          maskCanvas.style.top = (imgRect.top - previewRect.top) + 'px';
+
+          clearMask();
+        }, 100);
+      };
+      img.src = imageSrc;
+    }
+
+    async function analyzeImage() {
+      if (!currentImageSource) return;
+
+      showStatus('loading', 'Analyzing image...');
+
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageSource: currentImageSource })
+        });
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        currentScene = data.scene;
+        displayScene(data.scene);
+        hideStatus();
+      } catch (error) {
+        showStatus('error', error.message);
+      }
+    }
+
+    function displayScene(scene) {
+      const container = document.getElementById('sceneAnalysis');
+      const elements = document.getElementById('sceneElements');
+
+      let html = '<div style="margin-bottom: 10px;">';
+      scene.elements.forEach(el => {
+        html += `<span class="element-tag" onclick="selectElement('${el.label}')">${el.label} (${el.position})</span>`;
+      });
+      html += '</div>';
+      html += `<div style="color: #888; font-size: 12px;">
+        Style: ${scene.style} | Lighting: ${scene.lighting} | Mood: ${scene.mood}
+      </div>`;
+
+      elements.innerHTML = html;
+      container.style.display = 'block';
+    }
+
+    async function selectElement(label) {
+      showStatus('loading', `Selecting "${label}"...`);
+
+      try {
+        const response = await fetch('/api/segment-label', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageSource: currentImageSource,
+            label: label
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        if (data.maskUrl) {
+          const maskImg = new Image();
+          maskImg.crossOrigin = 'anonymous';
+          maskImg.onload = () => {
+            // Draw semi-transparent version
+            ctx.globalAlpha = 0.5;
+            ctx.drawImage(maskImg, 0, 0, maskCanvas.width, maskCanvas.height);
+            ctx.globalAlpha = 1.0;
+            hasMask = true;
+            updateMaskIndicator();
+            hideStatus();
+            showStatus('success', `Selected "${label}"`);
+          };
+          maskImg.src = data.maskUrl;
+        }
+      } catch (error) {
+        showStatus('error', error.message);
+      }
+    }
+
+    async function quickEdit(operation) {
+      if (!currentImageSource) {
+        showStatus('error', 'Please upload an image first');
+        return;
+      }
+
+      const labels = {
+        'remove-bg': 'Removing background...',
+        'upscale': 'Upscaling image (this may take a minute)...',
+        'describe': 'Describing image...'
+      };
+
+      showStatus('loading', labels[operation]);
+
+      try {
+        const response = await fetch('/api/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageSource: currentImageSource,
+            quickOperation: operation
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        if (data.description) {
+          showStatus('success', `Description: ${data.description}`);
+        } else {
+          showResult(data.outputUrl);
+          showStatus('success', 'Edit complete!');
+        }
+      } catch (error) {
+        showStatus('error', error.message);
+      }
+    }
+
+    async function executeEdit() {
+      const instruction = document.getElementById('instruction').value.trim();
+
+      if (!currentImageSource) {
+        showStatus('error', 'Please upload an image first');
+        return;
+      }
+
+      if (!instruction) {
+        showStatus('error', 'Please enter an instruction');
+        return;
+      }
+
+      const maskDataUrl = getMaskDataUrl();
+
+      // Collect reference elements (imported elements that are mentioned or available)
+      const referenceElements = importedElements.map(el => ({
+        label: el.label,
+        dataUrl: el.dataUrl
+      }));
+
+      const statusMsg = hasMask
+        ? 'Processing masked edit... This may take up to 30 seconds.'
+        : referenceElements.length > 0
+          ? `Processing edit with ${referenceElements.length} reference element(s)...`
+          : 'Processing edit... This may take up to 30 seconds.';
+
+      showStatus('loading', statusMsg);
+
+      try {
+        const response = await fetch('/api/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageSource: currentImageSource,
+            instruction: instruction,
+            mask: maskDataUrl,
+            useGemini: true,
+            referenceElements: referenceElements
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        showResult(data.outputUrl);
+        const time = data.processingTime ? ` in ${(data.processingTime / 1000).toFixed(1)}s` : '';
+        showStatus('success', `Edit complete${time}`);
+      } catch (error) {
+        showStatus('error', error.message);
+      }
+    }
+
+    function showResult(url) {
+      const panel = document.getElementById('resultPanel');
+      const preview = document.getElementById('outputPreview');
+      const downloadLink = document.getElementById('downloadLink');
+
+      // Create image to get natural dimensions
+      const img = new Image();
+      img.onload = function() {
+        // Display at correct aspect ratio with constrained container
+        const maxHeight = 600;
+        const maxWidth = preview.clientWidth || 800;
+        let displayWidth = img.naturalWidth;
+        let displayHeight = img.naturalHeight;
+
+        // Scale down if too large, preserving aspect ratio
+        if (displayHeight > maxHeight) {
+          const scale = maxHeight / displayHeight;
+          displayWidth = Math.round(displayWidth * scale);
+          displayHeight = maxHeight;
+        }
+        if (displayWidth > maxWidth) {
+          const scale = maxWidth / displayWidth;
+          displayHeight = Math.round(displayHeight * scale);
+          displayWidth = maxWidth;
+        }
+
+        preview.innerHTML = `<img src="${url}" alt="Result" style="width: ${displayWidth}px; height: ${displayHeight}px; display: block; margin: 0 auto;">`;
+
+        // Store original dimensions for download info
+        preview.dataset.originalWidth = img.naturalWidth;
+        preview.dataset.originalHeight = img.naturalHeight;
+
+        // Update download button with resolution
+        const resSpan = document.getElementById('downloadRes');
+        if (resSpan) {
+          resSpan.textContent = `(${img.naturalWidth}x${img.naturalHeight})`;
+        }
+
+        console.log(`Result image: ${img.naturalWidth}x${img.naturalHeight} displayed at ${displayWidth}x${displayHeight}`);
+      };
+      img.src = url;
+
+      // For high quality download, ensure we're using the full resolution URL
+      downloadLink.href = url;
+      downloadLink.onclick = function(e) {
+        // If it's a data URL or external URL, download at full quality
+        if (url.startsWith('data:')) {
+          // For data URLs, create a proper download
+          e.preventDefault();
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `edited-image-${Date.now()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+        // For external URLs, the default behavior works
+      };
+
+      panel.style.display = 'block';
+    }
+
+    function useAsInput() {
+      const outputImg = document.querySelector('#outputPreview img');
+      if (outputImg) {
+        currentImageSource = outputImg.src;
+        showPreview('inputPreview', outputImg.src);
+        setupMaskCanvas(outputImg.src);
+        document.getElementById('sceneAnalysis').style.display = 'none';
+        document.getElementById('resultPanel').style.display = 'none';
+        clearMask();
+        analyzeImage();
+      }
+    }
+
+    function showStatus(type, message) {
+      const status = document.getElementById('status');
+      status.className = `status ${type}`;
+
+      if (type === 'loading') {
+        status.innerHTML = `<span class="spinner"></span>${message}`;
+      } else {
+        status.textContent = message;
+      }
+    }
+
+    function hideStatus() {
+      document.getElementById('status').className = 'status';
+    }
+
+    // ============ ZOOM FUNCTIONS ============
+
+    function zoomIn() {
+      setZoom(Math.min(zoomLevel * 1.25, 5));
+    }
+
+    function zoomOut() {
+      setZoom(Math.max(zoomLevel / 1.25, 0.25));
+    }
+
+    function resetZoom() {
+      setZoom(1);
+      panX = 0;
+      panY = 0;
+      applyTransform();
+    }
+
+    function fitToView() {
+      const container = document.getElementById('editorContainer');
+      const img = document.querySelector('#inputPreview img');
+      if (!img) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const scaleX = containerRect.width / img.naturalWidth;
+      const scaleY = (containerRect.height - 50) / img.naturalHeight; // Account for zoom controls
+      const fitScale = Math.min(scaleX, scaleY, 1);
+
+      setZoom(fitScale);
+      panX = 0;
+      panY = 0;
+      applyTransform();
+    }
+
+    function setZoom(level) {
+      zoomLevel = level;
+      document.getElementById('zoomLevel').textContent = Math.round(level * 100) + '%';
+      applyTransform();
+    }
+
+    function applyTransform() {
+      const img = document.querySelector('#inputPreview img');
+      if (!img) return;
+
+      img.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+      maskCanvas.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+
+      // Also transform placed elements
+      placedElements.forEach(el => {
+        if (el.domElement) {
+          el.domElement.style.transform = `scale(${zoomLevel})`;
+        }
+      });
+    }
+
+    // Mouse wheel zoom
+    document.getElementById('editorContainer').addEventListener('wheel', (e) => {
+      if (!imageElement) return;
+      e.preventDefault();
+
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = Math.max(0.25, Math.min(5, zoomLevel * delta));
+      setZoom(newZoom);
+    }, { passive: false });
+
+    // Pan with middle mouse or when holding space
+    let spacePressed = false;
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && imageElement) {
+        spacePressed = true;
+        document.getElementById('editorContainer').style.cursor = 'grab';
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        spacePressed = false;
+        document.getElementById('editorContainer').style.cursor = '';
+      }
+    });
+
+    document.getElementById('editorContainer').addEventListener('mousedown', (e) => {
+      if ((spacePressed || e.button === 1) && imageElement) {
+        isPanning = true;
+        panStartX = e.clientX - panX * zoomLevel;
+        panStartY = e.clientY - panY * zoomLevel;
+        document.getElementById('editorContainer').style.cursor = 'grabbing';
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isPanning) {
+        panX = (e.clientX - panStartX) / zoomLevel;
+        panY = (e.clientY - panStartY) / zoomLevel;
+        applyTransform();
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isPanning) {
+        isPanning = false;
+        document.getElementById('editorContainer').style.cursor = spacePressed ? 'grab' : '';
+      }
+    });
+
+    // ============ UNDO/REDO FUNCTIONS ============
+
+    function saveToHistory(action, data) {
+      // Remove any future history if we're in the middle of the stack
+      if (historyIndex < historyStack.length - 1) {
+        historyStack = historyStack.slice(0, historyIndex + 1);
+      }
+
+      // Add new history entry
+      historyStack.push({
+        action,
+        data: JSON.parse(JSON.stringify(data)), // Deep clone
+        timestamp: Date.now()
+      });
+
+      // Limit history size
+      if (historyStack.length > MAX_HISTORY) {
+        historyStack.shift();
+      } else {
+        historyIndex++;
+      }
+
+      updateUndoRedoButtons();
+    }
+
+    function getPlacedElementsState() {
+      return placedElements.map(el => ({
+        id: el.id,
+        sourceId: el.sourceId,
+        label: el.label,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        aspectRatio: el.aspectRatio
+      }));
+    }
+
+    function restorePlacedElementsState(state) {
+      // Remove all current placed elements
+      placedElements.forEach(el => {
+        if (el.domElement) el.domElement.remove();
+      });
+      placedElements = [];
+
+      // Recreate elements from state
+      state.forEach(elState => {
+        const source = importedElements.find(s => s.id === elState.sourceId);
+        if (!source) return;
+
+        const preview = document.getElementById('inputPreview');
+        const div = document.createElement('div');
+        div.className = 'draggable-element';
+        div.id = elState.id;
+        div.innerHTML = `
+          <img src="${source.dataUrl}" alt="Placed element: ${elState.label}">
+          <div class="resize-handle se" data-handle="se"></div>
+          <div class="resize-handle sw" data-handle="sw"></div>
+          <div class="resize-handle ne" data-handle="ne"></div>
+          <div class="resize-handle nw" data-handle="nw"></div>
+          <div style="position: absolute; top: -20px; left: 0; background: rgba(102,126,234,0.9); padding: 2px 6px; border-radius: 3px; font-size: 10px; white-space: nowrap;">${elState.label}</div>
+        `;
+
+        div.style.width = elState.width + 'px';
+        div.style.height = elState.height + 'px';
+        div.style.left = elState.x + 'px';
+        div.style.top = elState.y + 'px';
+
+        preview.appendChild(div);
+
+        const placedEl = {
+          ...elState,
+          domElement: div
+        };
+
+        placedElements.push(placedEl);
+        setupDraggable(div, placedEl);
+      });
+    }
+
+    function undo() {
+      if (historyIndex <= 0) return;
+
+      historyIndex--;
+      const entry = historyStack[historyIndex];
+
+      if (entry) {
+        restorePlacedElementsState(entry.data);
+      } else {
+        // At the beginning, clear all elements
+        placedElements.forEach(el => {
+          if (el.domElement) el.domElement.remove();
+        });
+        placedElements = [];
+      }
+
+      updateUndoRedoButtons();
+    }
+
+    function redo() {
+      if (historyIndex >= historyStack.length - 1) return;
+
+      historyIndex++;
+      const entry = historyStack[historyIndex];
+
+      if (entry) {
+        restorePlacedElementsState(entry.data);
+      }
+
+      updateUndoRedoButtons();
+    }
+
+    function updateUndoRedoButtons() {
+      const undoBtn = document.getElementById('undoBtn');
+      const redoBtn = document.getElementById('redoBtn');
+      const controls = document.getElementById('undoRedoControls');
+
+      undoBtn.disabled = historyIndex <= 0;
+      redoBtn.disabled = historyIndex >= historyStack.length - 1;
+
+      // Show controls if we have history
+      if (historyStack.length > 0) {
+        controls.classList.remove('hidden');
+      }
+    }
+
+    // Keyboard shortcuts for undo/redo
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        redo();
+        e.preventDefault();
+      }
+    });
+
+    // ============ ELEMENT IMPORT FUNCTIONS ============
+
+    const elementUploadArea = document.getElementById('elementUploadArea');
+    const elementInput = document.getElementById('elementInput');
+
+    elementUploadArea.addEventListener('click', () => elementInput.click());
+
+    elementUploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      elementUploadArea.style.borderColor = '#667eea';
+      elementUploadArea.style.background = 'rgba(102, 126, 234, 0.1)';
+    });
+
+    elementUploadArea.addEventListener('dragleave', () => {
+      elementUploadArea.style.borderColor = '';
+      elementUploadArea.style.background = '';
+    });
+
+    elementUploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      elementUploadArea.style.borderColor = '';
+      elementUploadArea.style.background = '';
+      const files = Array.from(e.dataTransfer.files);
+      files.forEach(file => addImportedElement(file));
+    });
+
+    elementInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      files.forEach(file => addImportedElement(file));
+      elementInput.value = ''; // Reset for re-uploading same file
+    });
+
+    function addImportedElement(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        const id = `element_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Get natural dimensions for aspect ratio
+        const img = new Image();
+        img.onload = () => {
+          const baseName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+          const label = prompt(`Name this element (for referencing in prompts):`, baseName) || baseName;
+
+          importedElements.push({
+            id,
+            dataUrl,
+            name: file.name,
+            label: label,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+            aspectRatio: img.naturalWidth / img.naturalHeight
+          });
+          renderImportedElements();
+
+          // Show instructions
+          document.getElementById('elementInstructions').style.display = 'block';
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderImportedElements() {
+      const container = document.getElementById('importedElements');
+      container.innerHTML = importedElements.map(el => `
+        <div class="imported-element" onclick="placeElement('${el.id}')" title="Click to place '${el.label}' on image">
+          <img src="${el.dataUrl}" alt="${el.name}">
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); padding: 2px 4px; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${el.label}</div>
+          <button class="remove-btn" onclick="event.stopPropagation(); removeImportedElement('${el.id}')">×</button>
+        </div>
+      `).join('');
+
+      // Show element names that can be referenced
+      if (importedElements.length > 0) {
+        const names = importedElements.map(el => `"${el.label}"`).join(', ');
+        document.getElementById('elementInstructions').innerHTML = `
+          <strong>Reference these in your prompt:</strong> ${names}<br>
+          <small style="color: #888;">Example: "Add a sign with the ${importedElements[0]?.label || 'logo'}"</small><br>
+          Click an element to place it on the image. Drag to move, corners to resize (hold Shift to preserve ratio).
+          <br><button class="tool-btn" onclick="flattenElements()" style="margin-top: 8px;">Flatten Elements onto Image</button>
+        `;
+      }
+    }
+
+    function removeImportedElement(id) {
+      importedElements = importedElements.filter(el => el.id !== id);
+      renderImportedElements();
+
+      // Remove any placed instances
+      placedElements = placedElements.filter(el => {
+        if (el.sourceId === id) {
+          el.domElement.remove();
+          return false;
+        }
+        return true;
+      });
+
+      if (importedElements.length === 0) {
+        document.getElementById('elementInstructions').style.display = 'none';
+      }
+    }
+
+    function placeElement(sourceId) {
+      if (!imageElement) {
+        showStatus('error', 'Please load a base image first');
+        return;
+      }
+
+      const source = importedElements.find(el => el.id === sourceId);
+      if (!source) return;
+
+      const preview = document.getElementById('inputPreview');
+      const previewRect = preview.getBoundingClientRect();
+      const img = preview.querySelector('img');
+      const imgRect = img.getBoundingClientRect();
+
+      // Calculate image offset within preview container
+      const imageOffsetX = imgRect.left - previewRect.left;
+      const imageOffsetY = imgRect.top - previewRect.top;
+
+      // Create draggable element
+      const placedId = `placed_${Date.now()}`;
+      const div = document.createElement('div');
+      div.className = 'draggable-element';
+      div.id = placedId;
+      div.innerHTML = `
+        <img src="${source.dataUrl}" alt="Placed element: ${source.label}">
+        <div class="resize-handle se" data-handle="se"></div>
+        <div class="resize-handle sw" data-handle="sw"></div>
+        <div class="resize-handle ne" data-handle="ne"></div>
+        <div class="resize-handle nw" data-handle="nw"></div>
+        <div style="position: absolute; top: -20px; left: 0; background: rgba(102,126,234,0.9); padding: 2px 6px; border-radius: 3px; font-size: 10px; white-space: nowrap;">${source.label}</div>
+      `;
+
+      // Calculate size preserving aspect ratio
+      // Size element relative to the displayed image size for natural proportions
+      const aspectRatio = source.aspectRatio || 1;
+      const maxSize = Math.min(imgRect.width, imgRect.height) * 0.3; // 30% of smaller image dimension
+      let width, height;
+
+      if (aspectRatio >= 1) {
+        // Wider than tall
+        width = maxSize;
+        height = maxSize / aspectRatio;
+      } else {
+        // Taller than wide
+        height = maxSize;
+        width = maxSize * aspectRatio;
+      }
+
+      // Position element at center of the displayed IMAGE (not preview container)
+      const centerX = imageOffsetX + imgRect.width / 2 - width / 2;
+      const centerY = imageOffsetY + imgRect.height / 2 - height / 2;
+
+      div.style.width = width + 'px';
+      div.style.height = height + 'px';
+      div.style.left = centerX + 'px';
+      div.style.top = centerY + 'px';
+
+      preview.appendChild(div);
+
+      const placedEl = {
+        id: placedId,
+        sourceId: sourceId,
+        label: source.label,
+        domElement: div,
+        x: centerX,
+        y: centerY,
+        width: width,
+        height: height,
+        aspectRatio: aspectRatio
+      };
+
+      placedElements.push(placedEl);
+      setupDraggable(div, placedEl);
+
+      // Save to history
+      saveToHistory('place', getPlacedElementsState());
+
+      showStatus('success', `"${source.label}" placed! Drag to move, corners to resize (Shift = keep ratio).`);
+    }
+
+    function setupDraggable(element, placedEl) {
+      let startX, startY, startLeft, startTop, startWidth, startHeight;
+      let resizeHandle = null;
+
+      element.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('resize-handle')) {
+          // Start resize
+          isResizingElement = true;
+          resizeHandle = e.target.dataset.handle;
+          startX = e.clientX;
+          startY = e.clientY;
+          startWidth = element.offsetWidth;
+          startHeight = element.offsetHeight;
+          startLeft = element.offsetLeft;
+          startTop = element.offsetTop;
+        } else if (!e.target.style || !e.target.style.background?.includes('102,126,234')) {
+          // Start drag (but not if clicking the label)
+          isDraggingElement = true;
+          startX = e.clientX - element.offsetLeft;
+          startY = e.clientY - element.offsetTop;
+        }
+
+        selectedPlacedElement = placedEl;
+        e.preventDefault();
+        e.stopPropagation();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (isDraggingElement && selectedPlacedElement === placedEl) {
+          const newX = e.clientX - startX;
+          const newY = e.clientY - startY;
+          element.style.left = newX + 'px';
+          element.style.top = newY + 'px';
+          placedEl.x = newX;
+          placedEl.y = newY;
+        }
+
+        if (isResizingElement && selectedPlacedElement === placedEl) {
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          const aspectRatio = placedEl.aspectRatio || (startWidth / startHeight);
+          const preserveRatio = e.shiftKey;
+
+          let newWidth = startWidth;
+          let newHeight = startHeight;
+          let newLeft = startLeft;
+          let newTop = startTop;
+
+          if (resizeHandle.includes('e')) {
+            newWidth = Math.max(30, startWidth + dx);
+            if (preserveRatio) newHeight = newWidth / aspectRatio;
+          }
+          if (resizeHandle.includes('w')) {
+            newWidth = Math.max(30, startWidth - dx);
+            if (preserveRatio) newHeight = newWidth / aspectRatio;
+            newLeft = startLeft + (startWidth - newWidth);
+          }
+          if (resizeHandle.includes('s')) {
+            newHeight = Math.max(30, startHeight + dy);
+            if (preserveRatio) newWidth = newHeight * aspectRatio;
+          }
+          if (resizeHandle.includes('n')) {
+            newHeight = Math.max(30, startHeight - dy);
+            if (preserveRatio) newWidth = newHeight * aspectRatio;
+            newTop = startTop + (startHeight - newHeight);
+          }
+
+          // For corner handles with shift, use the larger dimension change
+          if (preserveRatio && (resizeHandle === 'se' || resizeHandle === 'sw' || resizeHandle === 'ne' || resizeHandle === 'nw')) {
+            const widthChange = Math.abs(dx);
+            const heightChange = Math.abs(dy);
+            if (widthChange > heightChange) {
+              newWidth = Math.max(30, startWidth + (resizeHandle.includes('e') ? dx : -dx));
+              newHeight = newWidth / aspectRatio;
+            } else {
+              newHeight = Math.max(30, startHeight + (resizeHandle.includes('s') ? dy : -dy));
+              newWidth = newHeight * aspectRatio;
+            }
+            if (resizeHandle.includes('w')) newLeft = startLeft + (startWidth - newWidth);
+            if (resizeHandle.includes('n')) newTop = startTop + (startHeight - newHeight);
+          }
+
+          element.style.width = newWidth + 'px';
+          element.style.height = newHeight + 'px';
+          element.style.left = newLeft + 'px';
+          element.style.top = newTop + 'px';
+
+          placedEl.width = newWidth;
+          placedEl.height = newHeight;
+          placedEl.x = newLeft;
+          placedEl.y = newTop;
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        // Save to history after drag or resize is complete
+        if ((isDraggingElement || isResizingElement) && selectedPlacedElement === placedEl) {
+          saveToHistory('move-resize', getPlacedElementsState());
+        }
+        isDraggingElement = false;
+        isResizingElement = false;
+        resizeHandle = null;
+      });
+
+      // Delete on double-click
+      element.addEventListener('dblclick', () => {
+        if (confirm(`Remove "${placedEl.label}"?`)) {
+          element.remove();
+          placedElements = placedElements.filter(el => el.id !== placedEl.id);
+          // Save to history after delete
+          saveToHistory('delete', getPlacedElementsState());
+        }
+      });
+    }
+
+    async function flattenElements() {
+      if (placedElements.length === 0) {
+        showStatus('error', 'No elements to flatten');
+        return;
+      }
+
+      if (!imageElement) {
+        showStatus('error', 'No base image loaded');
+        return;
+      }
+
+      showStatus('loading', 'Flattening elements onto image...');
+
+      try {
+        // Create a high-quality canvas to composite everything
+        const canvas = document.createElement('canvas');
+        const img = document.querySelector('#inputPreview img');
+        const preview = document.getElementById('inputPreview');
+
+        // Use natural image dimensions for high quality output
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const flattenCtx = canvas.getContext('2d');
+
+        // Enable high-quality image smoothing
+        flattenCtx.imageSmoothingEnabled = true;
+        flattenCtx.imageSmoothingQuality = 'high';
+
+        // Draw base image at full resolution
+        flattenCtx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+
+        // Get the displayed image bounds
+        const imgRect = img.getBoundingClientRect();
+        const previewRect = preview.getBoundingClientRect();
+
+        // Calculate the offset of the image within the preview container
+        const imageOffsetX = imgRect.left - previewRect.left;
+        const imageOffsetY = imgRect.top - previewRect.top;
+
+        // The displayed image dimensions (already affected by zoom)
+        const displayedWidth = imgRect.width;
+        const displayedHeight = imgRect.height;
+
+        // Scale factors from displayed size to natural size
+        const scaleX = img.naturalWidth / displayedWidth;
+        const scaleY = img.naturalHeight / displayedHeight;
+
+        console.log(`Flatten: natural=${img.naturalWidth}x${img.naturalHeight}, displayed=${displayedWidth.toFixed(0)}x${displayedHeight.toFixed(0)}, zoom=${zoomLevel}`);
+        console.log(`Flatten: scale=${scaleX.toFixed(3)}x${scaleY.toFixed(3)}, imageOffset=(${imageOffsetX.toFixed(0)}, ${imageOffsetY.toFixed(0)})`);
+
+        // Draw each placed element
+        for (const placedEl of placedElements) {
+          const source = importedElements.find(el => el.id === placedEl.sourceId);
+          if (!source) continue;
+
+          const elImg = new Image();
+          await new Promise((resolve, reject) => {
+            elImg.onload = resolve;
+            elImg.onerror = reject;
+            elImg.src = source.dataUrl;
+          });
+
+          // Element CSS position is relative to the preview container
+          // Get the element's actual DOM position for accuracy
+          const domEl = placedEl.domElement;
+          const elLeft = parseFloat(domEl.style.left) || placedEl.x;
+          const elTop = parseFloat(domEl.style.top) || placedEl.y;
+          const elWidth = parseFloat(domEl.style.width) || placedEl.width;
+          const elHeight = parseFloat(domEl.style.height) || placedEl.height;
+
+          // Calculate position relative to the displayed image
+          // Element position - image offset = position within image display area
+          const relativeX = elLeft - imageOffsetX;
+          const relativeY = elTop - imageOffsetY;
+
+          // Scale to natural image coordinates
+          const naturalX = relativeX * scaleX;
+          const naturalY = relativeY * scaleY;
+          const naturalWidth = elWidth * scaleX;
+          const naturalHeight = elHeight * scaleY;
+
+          console.log(`Element "${placedEl.label}": CSS=(${elLeft.toFixed(0)}, ${elTop.toFixed(0)}, ${elWidth.toFixed(0)}x${elHeight.toFixed(0)}) rel=(${relativeX.toFixed(0)}, ${relativeY.toFixed(0)}) -> natural=(${naturalX.toFixed(0)}, ${naturalY.toFixed(0)}, ${naturalWidth.toFixed(0)}x${naturalHeight.toFixed(0)})`);
+
+          // Draw the element at its natural size position
+          flattenCtx.drawImage(elImg, naturalX, naturalY, naturalWidth, naturalHeight);
+        }
+
+        // Convert to high-quality PNG data URL
+        const dataUrl = canvas.toDataURL('image/png', 1.0);
+
+        console.log(`Flattened image: ${canvas.width}x${canvas.height}`);
+
+        currentImageSource = dataUrl;
+        showPreview('inputPreview', dataUrl);
+        setupMaskCanvas(dataUrl);
+
+        // Remove all placed elements
+        placedElements.forEach(el => el.domElement.remove());
+        placedElements = [];
+
+        // Clear history after flatten (can't undo flatten)
+        historyStack = [];
+        historyIndex = -1;
+        updateUndoRedoButtons();
+
+        showStatus('success', `Elements flattened at ${canvas.width}x${canvas.height}! You can now edit the composite image.`);
+      } catch (error) {
+        showStatus('error', 'Failed to flatten: ' + error.message);
+        console.error('Flatten error:', error);
+      }
+    }
+  </script>
+</body>
+</html>

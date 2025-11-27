@@ -1,0 +1,42 @@
+{
+  "name": "ai-image-editor",
+  "version": "0.1.0",
+  "description": "Cloud-powered AI image editing - zero local installation required",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "NODE_ENV=production node dist/web/server.js",
+    "dev": "tsx src/orchestrator/ai-image-editor.ts",
+    "test": "vitest",
+    "edit": "tsx src/orchestrator/ai-image-editor.ts",
+    "web": "tsx web/server.ts",
+    "web:prod": "NODE_ENV=production node dist/web/server.js"
+  },
+  "keywords": [
+    "ai",
+    "image-editing",
+    "replicate",
+    "gemini",
+    "cloud"
+  ],
+  "author": "Alvaro Gonzalez",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@types/express": "^5.0.5",
+    "@types/multer": "^2.0.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
