@@ -470,16 +470,30 @@ export class GeminiDirector {
     // Clean up common issues with LLM JSON output
     let cleaned = text.trim();
 
-    // Remove markdown code blocks if present
-    if (cleaned.startsWith('```json')) {
-      cleaned = cleaned.slice(7);
-    } else if (cleaned.startsWith('```')) {
-      cleaned = cleaned.slice(3);
+    // Extract JSON from markdown code blocks using regex (handles whitespace variations)
+    const codeBlockMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (codeBlockMatch) {
+      cleaned = codeBlockMatch[1].trim();
+    } else {
+      // Fallback: strip leading/trailing backtick fences manually
+      if (cleaned.startsWith('```json')) {
+        cleaned = cleaned.slice(7);
+      } else if (cleaned.startsWith('```')) {
+        cleaned = cleaned.slice(3);
+      }
+      if (cleaned.endsWith('```')) {
+        cleaned = cleaned.slice(0, -3);
+      }
+      cleaned = cleaned.trim();
     }
-    if (cleaned.endsWith('```')) {
-      cleaned = cleaned.slice(0, -3);
+
+    // Try to extract JSON object/array if there's extra text around it
+    if (!cleaned.startsWith('{') && !cleaned.startsWith('[')) {
+      const jsonMatch = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (jsonMatch) {
+        cleaned = jsonMatch[1];
+      }
     }
-    cleaned = cleaned.trim();
 
     try {
       return JSON.parse(cleaned) as T;
