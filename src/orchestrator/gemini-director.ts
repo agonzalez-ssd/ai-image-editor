@@ -291,7 +291,13 @@ export class GeminiDirector {
 
     this.modelName = config.model || 'gemini-2.5-flash';
     this.genAI = new GoogleGenerativeAI(config.apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+    this.model = this.genAI.getGenerativeModel({
+      model: this.modelName,
+      generationConfig: {
+        // @ts-ignore - responseMimeType forces valid JSON output
+        responseMimeType: 'application/json',
+      },
+    });
   }
 
   /**
@@ -314,8 +320,8 @@ export class GeminiDirector {
         ],
       }],
       generationConfig: {
-        temperature: 0.3, // Slightly higher for more thorough detection
-        maxOutputTokens: 8192, // Increased for detailed analysis
+        temperature: 0.3,
+        maxOutputTokens: 16384,
       },
     });
 
@@ -335,7 +341,7 @@ export class GeminiDirector {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 4096,
       },
     });
 
@@ -497,10 +503,13 @@ export class GeminiDirector {
 
     try {
       return JSON.parse(cleaned) as T;
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`JSON parse error for ${context}:`, error.message);
+      console.error(`Response length: ${cleaned.length}, last 100 chars: ...${cleaned.slice(-100)}`);
       throw new Error(
-        `Failed to parse ${context} from Gemini response.\n` +
-        `Raw response: ${text.slice(0, 500)}...`
+        `Failed to parse ${context} from Gemini response. ` +
+        `Parse error: ${error.message}. ` +
+        `Response length: ${cleaned.length}`
       );
     }
   }
