@@ -321,7 +321,7 @@ export class GeminiDirector {
       }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 16384,
+        maxOutputTokens: 65536,
       },
     });
 
@@ -506,12 +506,57 @@ export class GeminiDirector {
     } catch (error: any) {
       console.error(`JSON parse error for ${context}:`, error.message);
       console.error(`Response length: ${cleaned.length}, last 100 chars: ...${cleaned.slice(-100)}`);
+
+      // Attempt to repair truncated JSON by closing open brackets/braces
+      const repaired = this.repairTruncatedJSON(cleaned);
+      if (repaired !== cleaned) {
+        try {
+          console.log(`Repaired truncated JSON for ${context} (added closing delimiters)`);
+          return JSON.parse(repaired) as T;
+        } catch {
+          // Repair didn't help
+        }
+      }
+
       throw new Error(
         `Failed to parse ${context} from Gemini response. ` +
         `Parse error: ${error.message}. ` +
         `Response length: ${cleaned.length}`
       );
     }
+  }
+
+  /**
+   * Attempt to repair truncated JSON by closing open brackets and braces
+   */
+  private repairTruncatedJSON(json: string): string {
+    // Remove any trailing incomplete string value (cut mid-string)
+    let repaired = json.replace(/,\s*"[^"]*$/, '');  // trailing key without value
+    repaired = repaired.replace(/,\s*"[^"]*":\s*"[^"]*$/, ''); // trailing incomplete string value
+    repaired = repaired.replace(/,\s*"[^"]*":\s*$/, ''); // trailing key with colon but no value
+    repaired = repaired.replace(/,\s*$/, ''); // trailing comma
+
+    // Count open/close delimiters and close any that are open
+    const opens: string[] = [];
+    let inString = false;
+    let escape = false;
+
+    for (const char of repaired) {
+      if (escape) { escape = false; continue; }
+      if (char === '\\') { escape = true; continue; }
+      if (char === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (char === '{' || char === '[') opens.push(char);
+      if (char === '}' || char === ']') opens.pop();
+    }
+
+    // Close any remaining open delimiters in reverse order
+    while (opens.length > 0) {
+      const open = opens.pop();
+      repaired += open === '{' ? '}' : ']';
+    }
+
+    return repaired;
   }
 }
 
