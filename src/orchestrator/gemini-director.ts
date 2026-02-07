@@ -289,7 +289,7 @@ export class GeminiDirector {
       );
     }
 
-    this.modelName = config.model || 'gemini-2.0-flash-exp';
+    this.modelName = config.model || 'gemini-2.5-flash';
     this.genAI = new GoogleGenerativeAI(config.apiKey);
     this.model = this.genAI.getGenerativeModel({ model: this.modelName });
   }
