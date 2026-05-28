@@ -293,42 +293,28 @@ app.post('/api/edit', async (req, res) => {
     // 1. Use Gemini for high-quality generation with good prompt understanding
     // 2. Manually composite only the masked pixels onto the original image
     if (mask) {
-      console.log('  Using Gemini + Compositing hybrid approach');
-      console.log('  Step 1: Generate edit with Gemini');
-
       let geminiResult;
 
-      // Use editWithMaskAndReferences if we have reference elements
       if (referenceElements && referenceElements.length > 0) {
-        console.log(`  Including ${referenceElements.length} reference element(s) in edit`);
+        console.log(`  Masked edit with ${referenceElements.length} reference(s)`);
         geminiResult = await geminiEditor.editWithMaskAndReferences(
-          source,
-          mask,
-          instruction,
-          referenceElements
+          source, mask, instruction, referenceElements
         );
       } else {
+        console.log('  Masked edit');
         geminiResult = await geminiEditor.editWithMask(source, mask, instruction);
       }
 
       if (!geminiResult.success || !geminiResult.outputDataUrl) {
-        console.log('  ✗ Gemini edit failed:', geminiResult.error);
+        console.log('  ✗ Masked edit failed:', geminiResult.error);
         return res.status(500).json({ error: geminiResult.error || 'Gemini edit failed' });
       }
 
-      console.log('  Step 2: Compositing masked pixels onto original');
-      const compositedResult = await compositeMaskedEdit(
-        source,
-        geminiResult.outputDataUrl,
-        mask
-      );
-
       console.log('  ✓ Masked edit complete');
-
       return res.json({
         success: true,
-        outputUrl: compositedResult,
-        operations: ['gemini-edit', 'mask-composite'],
+        outputUrl: geminiResult.outputDataUrl,
+        operations: ['gemini-masked-edit'],
         processingTime: 0
       });
     }
