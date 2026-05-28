@@ -49,6 +49,35 @@ export class GeminiEditor {
     this.ai = new GoogleGenAI({ apiKey: config.apiKey });
   }
 
+  private async prepareImage(source: string): Promise<{ data: string; mimeType: string }> {
+    if (Buffer.isBuffer(source)) {
+      return { data: (source as Buffer).toString('base64'), mimeType: 'image/jpeg' };
+    }
+    if (source.startsWith('data:')) {
+      const match = source.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) return { data: match[2], mimeType: match[1] };
+      throw new Error('Invalid data URL format');
+    }
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      const response = await fetch(source);
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      const mimeType = contentType.split(';')[0].trim();
+      const arrayBuffer = await response.arrayBuffer();
+      return { data: Buffer.from(arrayBuffer).toString('base64'), mimeType };
+    }
+    if (source.startsWith('/') || source.startsWith('.')) {
+      const fs = await import('fs/promises');
+      const buffer = await fs.readFile(source);
+      const ext = source.split('.').pop()?.toLowerCase();
+      const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+        : ext === 'webp' ? 'image/webp'
+        : ext === 'gif' ? 'image/gif'
+        : 'image/png';
+      return { data: buffer.toString('base64'), mimeType };
+    }
+    return { data: source, mimeType: 'image/jpeg' };
+  }
+
   private async generateWithRetry(contents: any[]): Promise<GeminiEditResult> {
     let lastError: Error | null = null;
 
@@ -114,7 +143,7 @@ export class GeminiEditor {
    */
   async editImage(imageSource: string, instruction: string): Promise<GeminiEditResult> {
     try {
-      const imageData = await this.prepareImageData(imageSource);
+      const img = await this.prepareImage(imageSource);
       let enhancedInstruction = instruction;
       if (this.quality === 'highest') {
         enhancedInstruction += ' [high quality, detailed, professional, preserve original style]';
@@ -129,7 +158,7 @@ export class GeminiEditor {
           {
             text: `Edit this image according to these instructions: ${enhancedInstruction}\n\nIMPORTANT: You MUST output the edited image. Apply the edit directly and return the modified image. Maintain the same resolution and quality as the original image.`,
           },
-          { inlineData: { mimeType: 'image/png', data: imageData } },
+          { inlineData: { mimeType: img.mimeType, data: img.data } },
         ],
       }]);
     } catch (error: any) {
@@ -148,8 +177,8 @@ export class GeminiEditor {
     instruction: string
   ): Promise<GeminiEditResult> {
     try {
-      const sourceData = await this.prepareImageData(sourceImage);
-      const maskData = await this.prepareImageData(mask);
+      const src = await this.prepareImage(sourceImage);
+      const msk = await this.prepareImage(mask);
       let enhancedInstruction = instruction;
       if (this.quality === 'highest') {
         enhancedInstruction += ' [high quality, detailed, seamless blend, professional]';
@@ -176,8 +205,8 @@ CRITICAL INSTRUCTIONS:
 
 Output the edited image.`,
           },
-          { inlineData: { mimeType: 'image/png', data: sourceData } },
-          { inlineData: { mimeType: 'image/png', data: maskData } },
+          { inlineData: { mimeType: src.mimeType, data: src.data } },
+          { inlineData: { mimeType: 'image/png', data: msk.data } },
         ],
       }]);
     } catch (error: any) {
@@ -195,8 +224,8 @@ Output the edited image.`,
     instruction: string
   ): Promise<GeminiEditResult> {
     try {
-      const sourceData = await this.prepareImageData(sourceImage);
-      const refData = await this.prepareImageData(referenceImage);
+      const src = await this.prepareImage(sourceImage);
+      const ref = await this.prepareImage(referenceImage);
 
       console.log(`\n🎨 Gemini Edit with Reference: "${instruction}"`);
 
@@ -206,8 +235,8 @@ Output the edited image.`,
           {
             text: `Edit the first image using the second image as a reference.\nInstructions: ${instruction}\n\nOutput the edited version of the first image.`,
           },
-          { inlineData: { mimeType: 'image/png', data: sourceData } },
-          { inlineData: { mimeType: 'image/png', data: refData } },
+          { inlineData: { mimeType: src.mimeType, data: src.data } },
+          { inlineData: { mimeType: ref.mimeType, data: ref.data } },
         ],
       }]);
     } catch (error: any) {
@@ -225,8 +254,8 @@ Output the edited image.`,
     referenceElements: Array<{ label: string; dataUrl: string }>
   ): Promise<GeminiEditResult> {
     try {
-      const sourceData = await this.prepareImageData(sourceImage);
-      const maskData = await this.prepareImageData(mask);
+      const src = await this.prepareImage(sourceImage);
+      const msk = await this.prepareImage(mask);
       let enhancedInstruction = instruction;
       if (this.quality === 'highest') {
         enhancedInstruction += ' [high quality, detailed, seamless blend, professional]';
@@ -256,13 +285,13 @@ ${referenceElements.length > 0 ? '6. When the instruction mentions any reference
 
 Output the edited image.`,
         },
-        { inlineData: { mimeType: 'image/png', data: sourceData } },
-        { inlineData: { mimeType: 'image/png', data: maskData } },
+        { inlineData: { mimeType: src.mimeType, data: src.data } },
+        { inlineData: { mimeType: 'image/png', data: msk.data } },
       ];
 
       for (const ref of referenceElements) {
-        const refData = await this.prepareImageData(ref.dataUrl);
-        parts.push({ inlineData: { mimeType: 'image/png', data: refData } });
+        const refImg = await this.prepareImage(ref.dataUrl);
+        parts.push({ inlineData: { mimeType: refImg.mimeType, data: refImg.data } });
       }
 
       return await this.generateWithRetry([{ role: 'user', parts }]);
@@ -281,7 +310,7 @@ Output the edited image.`,
     referenceElements: Array<{ label: string; dataUrl: string }>
   ): Promise<GeminiEditResult> {
     try {
-      const sourceData = await this.prepareImageData(sourceImage);
+      const src = await this.prepareImage(sourceImage);
       let enhancedInstruction = instruction;
       if (this.quality === 'highest') {
         enhancedInstruction += ' [high quality, detailed, professional, preserve original style]';
@@ -300,12 +329,12 @@ ${referenceElements.length > 0 ? `\nREFERENCE ELEMENTS (use these when mentioned
 IMPORTANT: You MUST output the edited image. Apply the edit directly and return the modified image.
 Maintain the same resolution and quality as the original image.`,
         },
-        { inlineData: { mimeType: 'image/png', data: sourceData } },
+        { inlineData: { mimeType: src.mimeType, data: src.data } },
       ];
 
       for (const ref of referenceElements) {
-        const refData = await this.prepareImageData(ref.dataUrl);
-        parts.push({ inlineData: { mimeType: 'image/png', data: refData } });
+        const refImg = await this.prepareImage(ref.dataUrl);
+        parts.push({ inlineData: { mimeType: refImg.mimeType, data: refImg.data } });
       }
 
       return await this.generateWithRetry([{ role: 'user', parts }]);
@@ -322,7 +351,7 @@ Maintain the same resolution and quality as the original image.`,
     point: { x: number; y: number }
   ): Promise<{ success: boolean; maskUrl?: string; error?: string }> {
     try {
-      const sourceData = await this.prepareImageData(sourceImage);
+      const img = await this.prepareImage(sourceImage);
       console.log(`\n🎯 Segmenting at point (${point.x}, ${point.y})`);
 
       const result = await this.generateWithRetry([{
@@ -338,7 +367,7 @@ Create a BLACK AND WHITE MASK image where:
 The mask should precisely outline the boundaries of the clicked object.
 Output ONLY the mask image (black and white, no color).`,
           },
-          { inlineData: { mimeType: 'image/png', data: sourceData } },
+          { inlineData: { mimeType: img.mimeType, data: img.data } },
         ],
       }]);
 
@@ -357,7 +386,7 @@ Output ONLY the mask image (black and white, no color).`,
     label: string
   ): Promise<{ success: boolean; maskUrl?: string; error?: string }> {
     try {
-      const sourceData = await this.prepareImageData(sourceImage);
+      const img = await this.prepareImage(sourceImage);
       console.log(`\n🏷️ Segmenting by label: "${label}"`);
 
       const result = await this.generateWithRetry([{
@@ -371,7 +400,7 @@ Output ONLY the mask image (black and white, no color).`,
 The mask should precisely outline the boundaries of the "${label}".
 Output ONLY the mask image (black and white, no color).`,
           },
-          { inlineData: { mimeType: 'image/png', data: sourceData } },
+          { inlineData: { mimeType: img.mimeType, data: img.data } },
         ],
       }]);
 
@@ -385,31 +414,6 @@ Output ONLY the mask image (black and white, no color).`,
     }
   }
 
-  // ============ Helper Methods ============
-
-  private async prepareImageData(source: string): Promise<string> {
-    if (Buffer.isBuffer(source)) return (source as Buffer).toString('base64');
-
-    if (source.startsWith('data:')) {
-      const base64Match = source.match(/^data:[^;]+;base64,(.+)$/);
-      if (base64Match) return base64Match[1];
-      throw new Error('Invalid data URL format');
-    }
-
-    if (source.startsWith('http://') || source.startsWith('https://')) {
-      const response = await fetch(source);
-      const arrayBuffer = await response.arrayBuffer();
-      return Buffer.from(arrayBuffer).toString('base64');
-    }
-
-    if (source.startsWith('/') || source.startsWith('.')) {
-      const fs = await import('fs/promises');
-      const buffer = await fs.readFile(source);
-      return buffer.toString('base64');
-    }
-
-    return source;
-  }
 }
 
 // ============ Factory Function ============

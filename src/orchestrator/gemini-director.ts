@@ -7,7 +7,7 @@
  * - Verifies edits were successful
  */
 
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 
 // ============ Types ============
 
@@ -277,8 +277,7 @@ Return ONLY valid JSON.`;
 // ============ Director Class ============
 
 export class GeminiDirector {
-  private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
+  private ai: GoogleGenAI;
   private modelName: string;
 
   constructor(config: DirectorConfig) {
@@ -290,42 +289,33 @@ export class GeminiDirector {
     }
 
     this.modelName = config.model || 'gemini-2.5-flash';
-    this.genAI = new GoogleGenerativeAI(config.apiKey);
-    this.model = this.genAI.getGenerativeModel({
-      model: this.modelName,
-      generationConfig: {
-        // @ts-ignore - responseMimeType forces valid JSON output
-        responseMimeType: 'application/json',
-      },
-    });
+    this.ai = new GoogleGenAI({ apiKey: config.apiKey });
   }
 
   /**
    * Analyze an image to understand its content and structure
    */
   async analyzeScene(imageSource: string | Buffer): Promise<SceneAnalysis> {
-    const imageData = await this.prepareImageData(imageSource);
+    const imageStr = Buffer.isBuffer(imageSource) ? imageSource.toString('base64') : imageSource;
+    const { data, mimeType } = await this.prepareImageData(imageStr);
 
-    const result = await this.model.generateContent({
+    const response = await this.ai.models.generateContent({
+      model: this.modelName,
       contents: [{
         role: 'user',
         parts: [
           { text: SCENE_ANALYSIS_PROMPT },
-          {
-            inlineData: {
-              mimeType: 'image/png',
-              data: imageData,
-            },
-          },
+          { inlineData: { mimeType, data } },
         ],
       }],
-      generationConfig: {
+      config: {
+        responseMimeType: 'application/json',
         temperature: 0.3,
         maxOutputTokens: 65536,
       },
     });
 
-    const text = result.response.text();
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     return this.parseJSON<SceneAnalysis>(text, 'scene analysis');
   }
 
@@ -337,15 +327,17 @@ export class GeminiDirector {
       .replace('{instruction}', instruction)
       .replace('{sceneAnalysis}', JSON.stringify(sceneAnalysis, null, 2));
 
-    const result = await this.model.generateContent({
+    const response = await this.ai.models.generateContent({
+      model: this.modelName,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
+      config: {
+        responseMimeType: 'application/json',
         temperature: 0.3,
         maxOutputTokens: 4096,
       },
     });
 
-    const text = result.response.text();
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     return this.parseJSON<EditPlan>(text, 'edit plan');
   }
 
@@ -358,31 +350,33 @@ export class GeminiDirector {
     instruction: string,
     expectedChanges: string[]
   ): Promise<{ success: boolean; confidence: number; issues: string[] }> {
-    const originalData = await this.prepareImageData(originalImage);
-    const editedData = await this.prepareImageData(editedImage);
+    const originalData = await this.prepareImageData(originalImage as string);
+    const editedData = await this.prepareImageData(editedImage as string);
 
     const prompt = VERIFICATION_PROMPT
       .replace('{instruction}', instruction)
       .replace('{expectedChanges}', JSON.stringify(expectedChanges));
 
-    const result = await this.model.generateContent({
+    const response = await this.ai.models.generateContent({
+      model: this.modelName,
       contents: [{
         role: 'user',
         parts: [
           { text: prompt },
           { text: 'Original image:' },
-          { inlineData: { mimeType: 'image/png', data: originalData } },
+          { inlineData: { mimeType: originalData.mimeType, data: originalData.data } },
           { text: 'Edited image:' },
-          { inlineData: { mimeType: 'image/png', data: editedData } },
+          { inlineData: { mimeType: editedData.mimeType, data: editedData.data } },
         ],
       }],
-      generationConfig: {
+      config: {
+        responseMimeType: 'application/json',
         temperature: 0.2,
         maxOutputTokens: 512,
       },
     });
 
-    const text = result.response.text();
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const verification = this.parseJSON<{
       success: boolean;
       changesDetected: string[];
@@ -440,36 +434,25 @@ export class GeminiDirector {
 
   // ============ Helper Methods ============
 
-  private async prepareImageData(source: string | Buffer): Promise<string> {
-    if (Buffer.isBuffer(source)) {
-      return source.toString('base64');
-    }
-
-    // If it's a data URL, extract the base64 part
+  private async prepareImageData(source: string): Promise<{ data: string; mimeType: string }> {
     if (source.startsWith('data:')) {
-      const base64Match = source.match(/^data:[^;]+;base64,(.+)$/);
-      if (base64Match) {
-        return base64Match[1];
-      }
+      const match = source.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) return { mimeType: match[1], data: match[2] };
       throw new Error('Invalid data URL format');
     }
-
-    // If it's a URL, fetch and convert to base64
     if (source.startsWith('http://') || source.startsWith('https://')) {
       const response = await fetch(source);
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      const mimeType = contentType.split(';')[0].trim();
       const arrayBuffer = await response.arrayBuffer();
-      return Buffer.from(arrayBuffer).toString('base64');
+      return { data: Buffer.from(arrayBuffer).toString('base64'), mimeType };
     }
-
-    // If it's a file path, read it
     if (source.startsWith('/') || source.startsWith('.')) {
       const fs = await import('fs/promises');
       const buffer = await fs.readFile(source);
-      return buffer.toString('base64');
+      return { data: buffer.toString('base64'), mimeType: 'image/jpeg' };
     }
-
-    // Assume it's already base64
-    return source;
+    return { data: source, mimeType: 'image/jpeg' };
   }
 
   private parseJSON<T>(text: string, context: string): T {
