@@ -133,6 +133,18 @@ app.use(express.static(publicPath));
 // Store uploaded images temporarily as base64
 const uploadedImages: Map<string, string> = new Map();
 
+// Status endpoint - shows deployed model config
+app.get('/api/status', (_req, res) => {
+  const editor = createGeminiEditor();
+  const director = createGeminiDirector();
+  res.json({
+    version: '2026-05-28-v3',
+    editorModel: (editor as any).modelName,
+    directorModel: (director as any).modelName,
+    apiKeySet: !!process.env.GOOGLE_AI_API_KEY,
+  });
+});
+
 // Upload endpoint
 app.post('/api/upload', upload.single('image'), (req, res) => {
   if (!req.file) {
