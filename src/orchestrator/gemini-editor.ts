@@ -46,7 +46,7 @@ export class GeminiEditor {
     // Upgrade path: gemini-3.1-flash-image-preview supports 4K + 14 reference images (preview as of Feb 2026).
     this.modelName = config.model || 'gemini-2.5-flash-image';
     this.quality = config.quality || 'highest';
-    this.maxRetries = config.maxRetries ?? 3;
+    this.maxRetries = config.maxRetries ?? 2;
     this.ai = new GoogleGenAI({ apiKey: config.apiKey });
   }
 
@@ -100,17 +100,25 @@ export class GeminiEditor {
 
   private async generateWithRetry(contents: any[]): Promise<GeminiEditResult> {
     let lastError: Error | null = null;
+    const TIMEOUT_MS = 55000; // 55s per attempt (Render free tier has ~60s idle timeout)
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        const response = await this.ai.models.generateContent({
-          model: this.modelName,
-          contents,
-          config: {
-            responseModalities: ['IMAGE', 'TEXT'],
-            temperature: 1,
-          },
-        });
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini request timed out after 55s. Try a simpler instruction or smaller image.')), TIMEOUT_MS)
+        );
+
+        const response = await Promise.race([
+          this.ai.models.generateContent({
+            model: this.modelName,
+            contents,
+            config: {
+              responseModalities: ['IMAGE', 'TEXT'],
+              temperature: 1,
+            },
+          }),
+          timeoutPromise,
+        ]);
 
         const parts = response.candidates?.[0]?.content?.parts || [];
         console.log(`  Response: ${parts.length} parts, types: ${parts.map((p: any) => p.inlineData ? 'image' : p.text ? 'text' : 'unknown').join(',')}`);
