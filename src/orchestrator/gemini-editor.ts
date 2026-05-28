@@ -6,6 +6,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import sharp from 'sharp';
 
 // ============ Types ============
 
@@ -49,33 +50,49 @@ export class GeminiEditor {
     this.ai = new GoogleGenAI({ apiKey: config.apiKey });
   }
 
+  // Cap images at 1536px max dimension before sending to Gemini (prevents OOM on free tier)
+  private async resizeIfNeeded(buffer: Buffer): Promise<Buffer> {
+    const meta = await sharp(buffer).metadata();
+    const maxDim = 1536;
+    if ((meta.width || 0) > maxDim || (meta.height || 0) > maxDim) {
+      return sharp(buffer).resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+    }
+    return buffer;
+  }
+
   private async prepareImage(source: string): Promise<{ data: string; mimeType: string }> {
     if (Buffer.isBuffer(source)) {
       return { data: (source as Buffer).toString('base64'), mimeType: 'image/jpeg' };
     }
-    if (source.startsWith('data:')) {
+    let buffer: Buffer;
+    let mimeType: string;
+
+    if (Buffer.isBuffer(source)) {
+      buffer = source as Buffer;
+      mimeType = 'image/jpeg';
+    } else if (source.startsWith('data:')) {
       const match = source.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) return { data: match[2], mimeType: match[1] };
-      throw new Error('Invalid data URL format');
-    }
-    if (source.startsWith('http://') || source.startsWith('https://')) {
+      if (!match) throw new Error('Invalid data URL format');
+      mimeType = match[1];
+      buffer = Buffer.from(match[2], 'base64');
+    } else if (source.startsWith('http://') || source.startsWith('https://')) {
       const response = await fetch(source);
       const contentType = response.headers.get('content-type') || 'image/jpeg';
-      const mimeType = contentType.split(';')[0].trim();
-      const arrayBuffer = await response.arrayBuffer();
-      return { data: Buffer.from(arrayBuffer).toString('base64'), mimeType };
-    }
-    if (source.startsWith('/') || source.startsWith('.')) {
+      mimeType = contentType.split(';')[0].trim();
+      buffer = Buffer.from(await response.arrayBuffer());
+    } else if (source.startsWith('/') || source.startsWith('.')) {
       const fs = await import('fs/promises');
-      const buffer = await fs.readFile(source);
+      buffer = await fs.readFile(source);
       const ext = source.split('.').pop()?.toLowerCase();
-      const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+      mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
         : ext === 'webp' ? 'image/webp'
-        : ext === 'gif' ? 'image/gif'
         : 'image/png';
-      return { data: buffer.toString('base64'), mimeType };
+    } else {
+      return { data: source, mimeType: 'image/jpeg' };
     }
-    return { data: source, mimeType: 'image/jpeg' };
+
+    buffer = await this.resizeIfNeeded(buffer);
+    return { data: buffer.toString('base64'), mimeType: 'image/jpeg' };
   }
 
   private async generateWithRetry(contents: any[]): Promise<GeminiEditResult> {
@@ -93,11 +110,15 @@ export class GeminiEditor {
         });
 
         const parts = response.candidates?.[0]?.content?.parts || [];
+        console.log(`  Response: ${parts.length} parts, types: ${parts.map((p: any) => p.inlineData ? 'image' : p.text ? 'text' : 'unknown').join(',')}`);
 
         for (const part of parts) {
-          if (part.inlineData?.data) {
-            const mimeType = part.inlineData.mimeType || 'image/png';
-            const base64 = part.inlineData.data;
+          // @google/genai SDK may expose inlineData directly or nested
+          const inlineData = (part as any).inlineData ?? (part as any).inline_data;
+          if (inlineData?.data) {
+            const mimeType = inlineData.mimeType || inlineData.mime_type || 'image/png';
+            const base64 = inlineData.data;
+            console.log(`  ✓ Got image (${mimeType}, ${Math.round(base64.length / 1024)}KB)`);
             return {
               success: true,
               outputBase64: base64,
@@ -109,13 +130,15 @@ export class GeminiEditor {
 
         const textPart = parts.find((p: any) => p.text);
         if (textPart) {
+          console.log(`  Text-only response: ${(textPart as any).text?.substring(0, 200)}`);
           return {
             success: false,
-            error: 'Model returned text instead of image. May need different model or prompt.',
-            textResponse: textPart.text,
+            error: 'Model returned text instead of image. Try a simpler instruction.',
+            textResponse: (textPart as any).text,
           };
         }
 
+        console.log(`  No image or text in response. Candidates: ${response.candidates?.length}`);
         return { success: false, error: 'No image in response' };
 
       } catch (error: any) {
