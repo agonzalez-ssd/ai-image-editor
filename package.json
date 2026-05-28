@@ -23,6 +23,7 @@
   "author": "Alvaro Gonzalez",
   "license": "MIT",
   "dependencies": {
+    "@google/genai": "^2.6.0",
     "@google/generative-ai": "^0.21.0",
     "@types/express": "^5.0.5",
     "@types/multer": "^2.0.0",
