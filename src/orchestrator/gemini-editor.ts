@@ -51,13 +51,16 @@ export class GeminiEditor {
   }
 
   // Cap images at 1536px max dimension before sending to Gemini (prevents OOM on free tier)
-  private async resizeIfNeeded(buffer: Buffer): Promise<Buffer> {
+  private async resizeIfNeeded(buffer: Buffer, mimeType: string): Promise<{ buffer: Buffer; mimeType: string }> {
     const meta = await sharp(buffer).metadata();
     const maxDim = 1536;
     if ((meta.width || 0) > maxDim || (meta.height || 0) > maxDim) {
-      return sharp(buffer).resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+      if (mimeType === 'image/png') {
+        return { buffer: await sharp(buffer).resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true }).png().toBuffer(), mimeType: 'image/png' };
+      }
+      return { buffer: await sharp(buffer).resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer(), mimeType: 'image/jpeg' };
     }
-    return buffer;
+    return { buffer, mimeType };
   }
 
   private async prepareImage(source: string): Promise<{ data: string; mimeType: string }> {
@@ -91,8 +94,8 @@ export class GeminiEditor {
       return { data: source, mimeType: 'image/jpeg' };
     }
 
-    buffer = await this.resizeIfNeeded(buffer);
-    return { data: buffer.toString('base64'), mimeType: 'image/jpeg' };
+    const resized = await this.resizeIfNeeded(buffer, mimeType);
+    return { data: resized.buffer.toString('base64'), mimeType: resized.mimeType };
   }
 
   private async generateWithRetry(contents: any[]): Promise<GeminiEditResult> {
@@ -229,7 +232,7 @@ CRITICAL INSTRUCTIONS:
 Output the edited image.`,
           },
           { inlineData: { mimeType: src.mimeType, data: src.data } },
-          { inlineData: { mimeType: 'image/png', data: msk.data } },
+          { inlineData: { mimeType: msk.mimeType, data: msk.data } },
         ],
       }]);
     } catch (error: any) {
@@ -309,7 +312,7 @@ ${referenceElements.length > 0 ? '6. When the instruction mentions any reference
 Output the edited image.`,
         },
         { inlineData: { mimeType: src.mimeType, data: src.data } },
-        { inlineData: { mimeType: 'image/png', data: msk.data } },
+        { inlineData: { mimeType: msk.mimeType, data: msk.data } },
       ];
 
       for (const ref of referenceElements) {
