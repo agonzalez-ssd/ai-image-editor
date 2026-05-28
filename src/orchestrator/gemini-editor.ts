@@ -5,7 +5,7 @@
  * This is an alternative to the Replicate pipeline for targeted edits
  * like color changes, style modifications, and localized edits.
  *
- * Uses gemini-2.0-flash-preview-image-generation for native image output.
+ * Uses gemini-2.5-flash-image ("Nano Banana") for native image output.
  */
 
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
@@ -45,8 +45,9 @@ export class GeminiEditor {
       );
     }
 
-    // gemini-2.0-flash-preview-image-generation is required for image output (responseModalities: ['image', 'text'])
-    this.modelName = config.model || 'gemini-2.0-flash-preview-image-generation';
+    // gemini-2.5-flash-image ("Nano Banana") is the current stable model for image output.
+    // Upgrade path: gemini-3.1-flash-image-preview supports 4K + 14 reference images (preview as of Feb 2026).
+    this.modelName = config.model || 'gemini-2.5-flash-image';
     this.quality = config.quality || 'highest';
     this.maxRetries = config.maxRetries ?? 3;
     this.genAI = new GoogleGenerativeAI(config.apiKey);
